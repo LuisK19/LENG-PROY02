@@ -1,0 +1,16 @@
+.stack-work/
+dist/
+dist-newstyle/
+*.hi
+*.o
+*.dyn_hi
+*.dyn_o
+
+
+*.exe
+*.out
+
+.DS_Store
+Thumbs.db
+
+.vscode/
