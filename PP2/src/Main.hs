@@ -48,7 +48,13 @@ generarEvento eid = do
   diasExtra <- randomRIO (0, 730 :: Int)
   let diaFuturo = toGregorian (addDaysSimple diasExtra diaHoy)
   let ts       = fromGregorian2Int diaFuturo
-  let valFinal = if val <= 0 then 500.0 else val
+  valFinal <- if val <= 0
+              then do
+                putStrLn $ "  [INCONSISTENCIA] Evento " ++ show eid ++
+                           " tenia monto invalido (" ++ show val ++
+                           "), corregido a 500.0"
+                return 500.0
+              else return val
   return Evento
     { eventoId  = eid
     , categoria = intACategoria catIdx
