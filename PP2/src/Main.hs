@@ -2,7 +2,8 @@ module Main (main) where
 
 import System.IO     (hSetBuffering, stdout, BufferMode(..))
 import System.Random (randomRIO)
-import Data.Time     (getCurrentTime, utctDay, toGregorian, Day)
+import Data.Time (getCurrentTime, utctDay, toGregorian,
+                  fromGregorian, Day, dayOfWeek, DayOfWeek(..))
 
 -- Estructuras de datos para eventos:
 data Categoria
@@ -107,13 +108,14 @@ esAltoValor promedio e = valor e > promedio
 etiquetarAltoValor :: [Evento] -> [(Evento, Bool)]
 etiquetarAltoValor eventos =
   let categorias = [Visualizacion, Apartado, Compra, Devolucion, Seguimiento]
-      -- Para cada categoría, calculamos su promedio
       promedios  = map (\cat ->
                      let evsCat = eventosPorCategoria cat eventos
                      in (cat, promedioValor evsCat)
                    ) categorias
       etiquetar e =
-        let promCat = snd $ head $ filter (\(c,_) -> c == categoria e) promedios
+        let promCat = case filter (\(c,_) -> c == categoria e) promedios of
+                        ((_, p):_) -> p
+                        []         -> 0
         in (e, esAltoValor promCat e)
   in map etiquetar eventos
 
@@ -127,7 +129,6 @@ mostrarEtiquetados = mapM_ mostrar
       if alto then " [*** ALTO VALOR ***]" else ""
 
 -- Analisis de datos
-
 
 montoTotal :: [Evento] -> Double
 montoTotal = foldl (\acc e -> acc + valor e) 0
@@ -161,6 +162,87 @@ mostrarAnalisis eventos = do
                " | " ++ show anio ++
                " | Promedio: " ++ show prom
     ) promedios
+
+-- ANÁLISIS TEMPORAL
+
+mesDeTimestamp :: Int -> Int
+mesDeTimestamp ts = (ts `mod` 10000) `div` 100
+
+diaDeTimestamp :: Int -> Int
+diaDeTimestamp ts = ts `mod` 100
+
+timestampADay :: Int -> Day
+timestampADay ts =
+  let anio = fromIntegral (anioDeTimestamp ts)
+      mes  = mesDeTimestamp ts
+      dia  = diaDeTimestamp ts
+  in fromGregorian anio mes dia
+
+mesMayorMonto :: [Evento] -> (Int, Double)
+mesMayorMonto [] = (0, 0)
+mesMayorMonto eventos =
+  let meses     = [1..12]
+      totales   = map (\m ->
+                    let evsMes = filter (\e -> mesDeTimestamp (timestamp e) == m) eventos
+                        total  = foldl (\acc e -> acc + valor e) 0 evsMes
+                    in (m, total)
+                  ) meses
+      ganador   = foldl1 (\(bm, bt) (m, t) -> if t > bt then (m, t) else (bm, bt))
+                              totales
+  in ganador
+
+diaSemanaActivo :: [Evento] -> String
+diaSemanaActivo [] = "Sin datos"
+diaSemanaActivo eventos =
+  let 
+      diasSemana = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
+      contarDia d = length $ filter (\e ->
+                      show (dayOfWeek (timestampADay (timestamp e))) == d
+                    ) eventos
+      conteos   = map (\d -> (d, contarDia d)) diasSemana
+      ganador   = foldl1 (\(bd, bc) (d, c) -> if c > bc then (d, c) else (bd, bc))
+                              conteos
+  in fst ganador ++ " (" ++ show (snd ganador) ++ " eventos)"
+
+eventoMasAntiguo :: [Evento] -> Evento
+eventoMasAntiguo = foldl1 (\acc e -> if timestamp e < timestamp acc then e else acc)
+
+eventoMasReciente :: [Evento] -> Evento
+eventoMasReciente = foldl1 (\acc e -> if timestamp e > timestamp acc then e else acc)
+
+resumenPorIntervalo :: [Evento] -> IO ()
+resumenPorIntervalo eventos = do
+  let intervalos = [ ("  500  - 10000 ", \v -> v >= 500    && v <= 10000)
+                   , ("10001  - 30000 ", \v -> v > 10000   && v <= 30000)
+                   , ("30001  - 75000 ", \v -> v > 30000   && v <= 75000)
+                   ]
+  putStrLn "\n  Resumen por intervalo de monto:"
+  mapM_ (\(nombre, cond) -> do
+    let evs    = filter (cond . valor) eventos
+        total  = foldl (\acc e -> acc + valor e) 0 evs
+        cant   = length evs
+    putStrLn $ "    [" ++ nombre ++ "]" ++
+               "  Cantidad: " ++ show cant ++
+               "  |  Monto total: " ++ show total
+    ) intervalos
+
+mostrarAnalisisTemporal :: [Evento] -> IO ()
+mostrarAnalisisTemporal [] = putStrLn "\n  No hay eventos para analizar."
+mostrarAnalisisTemporal eventos = do
+  let (mes, montoMes) = mesMayorMonto eventos
+  putStrLn $ "\n  Mes con mayor monto: " ++ show mes ++
+             " | Total: " ++ show montoMes
+
+  putStrLn $ "  Dia de semana mas activo: " ++ diaSemanaActivo eventos
+
+  let antiguo  = eventoMasAntiguo eventos
+      reciente = eventoMasReciente eventos
+  putStrLn "\n  Evento mas antiguo:"
+  mostrarEvento antiguo
+  putStrLn "  Evento mas reciente:"
+  mostrarEvento reciente
+
+  resumenPorIntervalo eventos
 
 -- ========================= Menu Principal ===================================
 
@@ -214,7 +296,8 @@ manejarOpcion eventos "2" = do
   menuLoop eventosNuevos
 
 manejarOpcion eventos "3" = do
-  putStrLn "\n[Analisis temporal - por implementar]"
+  putStrLn "\n--- Analisis Temporal ---"
+  mostrarAnalisisTemporal eventos
   eventosNuevos <- generarEventos eventos
   menuLoop eventosNuevos
 
