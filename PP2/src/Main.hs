@@ -23,7 +23,8 @@ data Evento = Evento
 
 
 -- ===== Manejo de eventos =====
--- Convierte un índice 0-4 a Categoria 
+
+-- Convierte un indice 0-4 a Categoria 
 intACategoria :: Int -> Categoria
 intACategoria 0 = Visualizacion
 intACategoria 1 = Apartado
@@ -73,7 +74,6 @@ generarEventos existentes = do
   putStrLn $ "  [Se generaron " ++ show cantidad ++ " nuevos eventos]"
   return (existentes ++ nuevos)
 
--- Muestra un evento
 mostrarEvento :: Evento -> IO ()
 mostrarEvento e = putStrLn $
   "  ID: "    ++ show (eventoId e)  ++
@@ -81,6 +81,86 @@ mostrarEvento e = putStrLn $
   " | Valor: " ++ show (valor e)    ++
   " | TS: "   ++ show (timestamp e)
 
+-- Transformacion de eventos
+
+aplicarImpuesto :: Evento -> Evento
+aplicarImpuesto e
+  | categoria e == Compra = e { valor = valor e * 1.13 }
+  | otherwise             = e
+
+transformarImpuestos :: [Evento] -> [Evento]
+transformarImpuestos = map aplicarImpuesto
+
+promedioValor :: [Evento] -> Double
+promedioValor [] = 0
+promedioValor es =
+  let total    = foldl (\acc e -> acc + valor e) 0 es
+      cantidad = fromIntegral (length es)
+  in total / cantidad
+
+eventosPorCategoria :: Categoria -> [Evento] -> [Evento]
+eventosPorCategoria cat = filter (\e -> categoria e == cat)
+
+esAltoValor :: Double -> Evento -> Bool
+esAltoValor promedio e = valor e > promedio
+
+etiquetarAltoValor :: [Evento] -> [(Evento, Bool)]
+etiquetarAltoValor eventos =
+  let categorias = [Visualizacion, Apartado, Compra, Devolucion, Seguimiento]
+      -- Para cada categoría, calculamos su promedio
+      promedios  = map (\cat ->
+                     let evsCat = eventosPorCategoria cat eventos
+                     in (cat, promedioValor evsCat)
+                   ) categorias
+      etiquetar e =
+        let promCat = snd $ head $ filter (\(c,_) -> c == categoria e) promedios
+        in (e, esAltoValor promCat e)
+  in map etiquetar eventos
+
+mostrarEtiquetados :: [(Evento, Bool)] -> IO ()
+mostrarEtiquetados = mapM_ mostrar
+  where
+    mostrar (e, alto) = putStrLn $
+      "  ID: " ++ show (eventoId e) ++
+      " | Cat: " ++ show (categoria e) ++
+      " | Valor: " ++ show (valor e) ++
+      if alto then " [*** ALTO VALOR ***]" else ""
+
+-- Analisis de datos
+
+
+montoTotal :: [Evento] -> Double
+montoTotal = foldl (\acc e -> acc + valor e) 0
+
+anioDeTimestamp :: Int -> Int
+anioDeTimestamp ts = ts `div` 10000
+
+promedioPorCategoriaAnio :: [Evento] -> [(Categoria, Int, Double)]
+promedioPorCategoriaAnio eventos =
+  let categorias = [Visualizacion, Apartado, Compra, Devolucion, Seguimiento]
+      anios      = [2025, 2026, 2027]  
+      resultado  = [ (cat, anio, promedioValor evsFiltrados)
+                   | cat  <- categorias
+                   , anio <- anios
+                   , let evsFiltrados = filter
+                           (\e -> categoria e == cat &&
+                                  anioDeTimestamp (timestamp e) == anio)
+                           eventos
+                   , not (null evsFiltrados)  -- omite combinaciones vacías
+                   ]
+  in resultado
+
+
+mostrarAnalisis :: [Evento] -> IO ()
+mostrarAnalisis eventos = do
+  putStrLn $ "\n  Monto total: " ++ show (montoTotal eventos)
+  putStrLn "\n  Promedio por categoria y anio:"
+  let promedios = promedioPorCategoriaAnio eventos
+  mapM_ (\(cat, anio, prom) ->
+    putStrLn $ "    " ++ show cat ++
+               " | " ++ show anio ++
+               " | Promedio: " ++ show prom
+    ) promedios
 
 -- ========================= Menu Principal ===================================
 
@@ -100,12 +180,36 @@ mostrarMenu = do
 
 manejarOpcion :: [Evento] -> String -> IO ()
 manejarOpcion eventos "1" = do
-  putStrLn "\n[Transformacion - por implementar]"
-  eventosNuevos <- generarEventos eventos
-  menuLoop eventosNuevos
+  putStrLn "\n--- Transformacion de eventos ---"
+  putStrLn "a. Aplicar impuesto a compras"
+  putStrLn "b. Etiquetar eventos de alto valor"
+  putStr "Seleccione: "
+  sub <- getLine
+  case sub of
+    "a" -> do
+      let compras   = filter (\e -> categoria e == Compra) eventos
+          transformados = transformarImpuestos eventos
+          comprasPost   = filter (\e -> categoria e == Compra) transformados
+      putStrLn $ "\nCompras encontradas: " ++ show (length compras)
+      putStrLn "\n  ANTES del impuesto:"
+      mapM_ mostrarEvento compras
+      putStrLn "\n  DESPUES del impuesto (13%):"
+      mapM_ mostrarEvento comprasPost
+      eventosNuevos <- generarEventos transformados
+      menuLoop eventosNuevos
+    "b" -> do
+      putStrLn "\nEventos etiquetados por alto valor:"
+      mostrarEtiquetados (etiquetarAltoValor eventos)
+      eventosNuevos <- generarEventos eventos
+      menuLoop eventosNuevos
+    _ -> do
+      putStrLn "\nOpcion no valida."
+      eventosNuevos <- generarEventos eventos
+      menuLoop eventosNuevos
 
 manejarOpcion eventos "2" = do
-  putStrLn "\n[Analisis de datos - por implementar]"
+  putStrLn "\n--- Analisis de datos ---"
+  mostrarAnalisis eventos
   eventosNuevos <- generarEventos eventos
   menuLoop eventosNuevos
 
