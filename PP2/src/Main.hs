@@ -5,6 +5,11 @@ import System.Random (randomRIO)
 import Data.Time (getCurrentTime, utctDay, toGregorian,
                   fromGregorian, Day, dayOfWeek, DayOfWeek(..))
 
+import Data.List        (intercalate, sortBy, groupBy, maximumBy)
+import Data.Ord         (comparing, Down(..))
+import Data.Function    (on)
+import System.Directory (createDirectoryIfMissing)
+
 -- Estructuras de datos para eventos:
 data Categoria
   = Visualizacion
@@ -163,7 +168,7 @@ mostrarAnalisis eventos = do
                " | Promedio: " ++ show prom
     ) promedios
 
--- ANÁLISIS TEMPORAL
+-- Analisis temporal
 
 mesDeTimestamp :: Int -> Int
 mesDeTimestamp ts = (ts `mod` 10000) `div` 100
@@ -244,6 +249,117 @@ mostrarAnalisisTemporal eventos = do
 
   resumenPorIntervalo eventos
 
+
+-- Busqueda por rango de fechas
+
+buscarPorRango :: Int -> Int -> [Evento] -> [Evento]
+buscarPorRango inicio fin = filter (\e -> timestamp e >= inicio && timestamp e <= fin)
+
+ejecutarBusqueda :: [Evento] -> IO ()
+ejecutarBusqueda eventos = do
+  putStrLn "\n  Ingrese fecha inicio (YYYYMMDD, ej: 20260101):"
+  putStr "  > "
+  inputInicio <- getLine
+  putStrLn "  Ingrese fecha fin (YYYYMMDD, ej: 20271231):"
+  putStr "  > "
+  inputFin <- getLine
+
+  case (reads inputInicio, reads inputFin) of
+    ([(inicio, "")], [(fin, "")]) -> do
+      if inicio > fin
+        then putStrLn "\n  [ERROR] La fecha inicio no puede ser mayor que la fecha fin."
+        else do
+          let resultados = buscarPorRango inicio fin eventos
+          putStrLn $ "\n  Eventos encontrados: " ++ show (length resultados)
+          if null resultados
+            then putStrLn "  No se encontraron eventos en ese rango."
+            else mapM_ mostrarEvento resultados
+    _ -> putStrLn "\n  [ERROR] Formato de fecha invalido. Use YYYYMMDD."
+
+-- Estadisticas
+
+cantidadPorCategoria :: [Evento] -> [(Categoria, Int)]
+cantidadPorCategoria eventos =
+  let cats = [Visualizacion, Apartado, Compra, Devolucion, Seguimiento]
+  in map (\c -> (c, length $ filter (\e -> categoria e == c) eventos)) cats
+
+eventoMayor :: [Evento] -> Evento
+eventoMayor = maximumBy (comparing valor)
+
+eventoMenor :: [Evento] -> Evento
+eventoMenor = maximumBy (comparing (Down . valor))
+
+diaMayorEventos :: [Evento] -> (Int, Int)
+diaMayorEventos [] = (0, 0)
+diaMayorEventos eventos =
+  let agrupados = map (\e -> timestamp e) eventos
+      contarDia d = (d, length $ filter (\e -> timestamp e == d) eventos)
+      conteos   = map contarDia agrupados
+  in foldl1 (\(bd, bc) (d, c) -> if c > bc then (d, c) else (bd, bc)) conteos
+
+mostrarEstadisticas :: [Evento] -> IO ()
+mostrarEstadisticas [] = putStrLn "\n  No hay eventos para mostrar."
+mostrarEstadisticas eventos = do
+  putStrLn "\n  --- Cantidad por categoria ---"
+  let cats = cantidadPorCategoria eventos
+  mapM_ (\(c, n) -> putStrLn $ "    " ++ show c ++ ": " ++ show n) cats
+
+  putStrLn "\n  --- Evento con monto mas alto ---"
+  mostrarEvento (eventoMayor eventos)
+
+  putStrLn "\n  --- Evento con monto mas bajo ---"
+  mostrarEvento (eventoMenor eventos)
+
+  let (dia, cant) = diaMayorEventos eventos
+  putStrLn $ "\n  --- Dia con mayor cantidad de eventos ---"
+  putStrLn $ "    Fecha: " ++ show dia ++ " | Eventos: " ++ show cant
+
+-- CSV
+
+eventoACSV :: Evento -> String
+eventoACSV e = intercalate ","
+  [ show (eventoId e)
+  , show (categoria e)
+  , show (valor e)
+  , show (timestamp e)
+  ]
+
+exportarCSV :: [Evento] -> IO ()
+exportarCSV eventos = do
+  createDirectoryIfMissing True "exports"
+  let header   = "id,categoria,valor,timestamp"
+      lineas   = map eventoACSV eventos
+      contenido = unlines (header : lineas)
+  writeFile "exports/estadisticas.csv" contenido
+  putStrLn "  [OK] Exportado a exports/estadisticas.csv"
+
+-- JSON
+
+categoriaAString :: Categoria -> String
+categoriaAString Visualizacion = "visualizacion"
+categoriaAString Apartado      = "apartado"
+categoriaAString Compra        = "compra"
+categoriaAString Devolucion    = "devolucion"
+categoriaAString Seguimiento   = "seguimiento"
+
+eventoAJSON :: Evento -> String
+eventoAJSON e = concat
+  [ "  {"
+  , "\"id\":"        , show (eventoId e)  , ","
+  , "\"categoria\":" , "\"" ++ categoriaAString (categoria e) ++ "\","
+  , "\"valor\":"     , show (valor e)     , ","
+  , "\"timestamp\":" , show (timestamp e)
+  , "}"
+  ]
+
+exportarJSON :: [Evento] -> IO ()
+exportarJSON eventos = do
+  createDirectoryIfMissing True "exports"
+  let objetos   = map eventoAJSON eventos
+      contenido = "[\n" ++ intercalate ",\n" objetos ++ "\n]"
+  writeFile "exports/estadisticas.json" contenido
+  putStrLn "  [OK] Exportado a exports/estadisticas.json"
+
 -- ========================= Menu Principal ===================================
 
 mostrarMenu :: IO ()
@@ -302,14 +418,26 @@ manejarOpcion eventos "3" = do
   menuLoop eventosNuevos
 
 manejarOpcion eventos "4" = do
-  putStrLn "\n[Busqueda - por implementar]"
+  putStrLn "\n--- Busqueda por rango de fechas ---"
+  ejecutarBusqueda eventos
   eventosNuevos <- generarEventos eventos
   menuLoop eventosNuevos
 
 manejarOpcion eventos "5" = do
-  putStrLn "\n[Estadisticas - mostrando eventos actuales]"
-  putStrLn $ "Total de eventos: " ++ show (length eventos)
-  mapM_ mostrarEvento (take 5 eventos)
+  putStrLn "\n--- Estadisticas ---"
+  mostrarEstadisticas eventos
+  putStrLn "\n  Exportar reporte:"
+  putStrLn "  a. CSV"
+  putStrLn "  b. JSON"
+  putStrLn "  c. Ambos"
+  putStrLn "  d. No exportar"
+  putStr "  Seleccione: "
+  sub <- getLine
+  case sub of
+    "a" -> exportarCSV eventos
+    "b" -> exportarJSON eventos
+    "c" -> do { exportarCSV eventos; exportarJSON eventos }
+    _   -> putStrLn "  [Sin exportar]"
   eventosNuevos <- generarEventos eventos
   menuLoop eventosNuevos
 
