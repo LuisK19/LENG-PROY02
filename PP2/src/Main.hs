@@ -324,14 +324,70 @@ eventoACSV e = intercalate ","
   , show (timestamp e)
   ]
 
-exportarCSV :: [Evento] -> IO ()
-exportarCSV eventos = do
+-- Exporta las estadísticas calculadas a CSV
+exportarEstadisticasCSV :: [Evento] -> IO ()
+exportarEstadisticasCSV eventos = do
   createDirectoryIfMissing True "exports"
-  let header   = "id,categoria,valor,timestamp"
-      lineas   = map eventoACSV eventos
-      contenido = unlines (header : lineas)
+  let cats    = cantidadPorCategoria eventos
+      mayor   = eventoMayor eventos
+      menor   = eventoMenor eventos
+      (dia, cantDia) = diaMayorEventos eventos
+      -- Sección 1: cantidad por categoría
+      headerCats  = "categoria,cantidad"
+      lineasCats  = map (\(c,n) -> categoriaAString c ++ "," ++ show n) cats
+      -- Sección 2: eventos extremos
+      headerExtr  = "tipo,id,categoria,valor,timestamp"
+      lineaMayor  = "mayor," ++ show (eventoId mayor) ++ "," ++
+                    categoriaAString (categoria mayor) ++ "," ++
+                    show (valor mayor) ++ "," ++ show (timestamp mayor)
+      lineaMenor  = "menor," ++ show (eventoId menor) ++ "," ++
+                    categoriaAString (categoria menor) ++ "," ++
+                    show (valor menor) ++ "," ++ show (timestamp menor)
+      -- Sección 3: día más activo
+      headerDia   = "fecha,cantidad_eventos"
+      lineaDia    = show dia ++ "," ++ show cantDia
+      -- Armar contenido completo
+      contenido   = unlines $
+                    ["# Cantidad por categoria", headerCats] ++ lineasCats ++
+                    ["", "# Eventos extremos", headerExtr, lineaMayor, lineaMenor] ++
+                    ["", "# Dia con mayor eventos", headerDia, lineaDia]
   writeFile "exports/estadisticas.csv" contenido
-  putStrLn "  [OK] Exportado a exports/estadisticas.csv"
+  putStrLn "  [OK] Estadisticas exportadas a exports/estadisticas.csv"
+
+-- Exporta las estadísticas calculadas a JSON
+exportarEstadisticasJSON :: [Evento] -> IO ()
+exportarEstadisticasJSON eventos = do
+  createDirectoryIfMissing True "exports"
+  let cats   = cantidadPorCategoria eventos
+      mayor  = eventoMayor eventos
+      menor  = eventoMenor eventos
+      (dia, cantDia) = diaMayorEventos eventos
+      -- Sección categorías
+      jsonCats = "  \"cantidad_por_categoria\": {\n" ++
+                 intercalate ",\n"
+                   (map (\(c,n) -> "    \"" ++ categoriaAString c ++
+                                   "\": " ++ show n) cats) ++
+                 "\n  }"
+      -- Sección extremos
+      jsonMayor = "    {\"tipo\":\"mayor\",\"id\":" ++ show (eventoId mayor) ++
+                  ",\"categoria\":\"" ++ categoriaAString (categoria mayor) ++
+                  "\",\"valor\":" ++ show (valor mayor) ++
+                  ",\"timestamp\":" ++ show (timestamp mayor) ++ "}"
+      jsonMenor = "    {\"tipo\":\"menor\",\"id\":" ++ show (eventoId menor) ++
+                  ",\"categoria\":\"" ++ categoriaAString (categoria menor) ++
+                  "\",\"valor\":" ++ show (valor menor) ++
+                  ",\"timestamp\":" ++ show (timestamp menor) ++ "}"
+      jsonExtr  = "  \"eventos_extremos\": [\n" ++
+                  intercalate ",\n" [jsonMayor, jsonMenor] ++
+                  "\n  ]"
+      -- Sección día más activo
+      jsonDia   = "  \"dia_mayor_eventos\": {\n" ++
+                  "    \"fecha\": " ++ show dia ++ ",\n" ++
+                  "    \"cantidad\": " ++ show cantDia ++ "\n" ++
+                  "  }"
+      contenido = "{\n" ++ intercalate ",\n" [jsonCats, jsonExtr, jsonDia] ++ "\n}"
+  writeFile "exports/estadisticas.json" contenido
+  putStrLn "  [OK] Estadisticas exportadas a exports/estadisticas.json"
 
 -- JSON
 
@@ -434,9 +490,11 @@ manejarOpcion eventos "5" = do
   putStr "  Seleccione: "
   sub <- getLine
   case sub of
-    "a" -> exportarCSV eventos
-    "b" -> exportarJSON eventos
-    "c" -> do { exportarCSV eventos; exportarJSON eventos }
+    "a" -> exportarEstadisticasCSV eventos
+    "b" -> exportarEstadisticasJSON eventos
+    "c" -> do
+      exportarEstadisticasCSV eventos
+      exportarEstadisticasJSON eventos
     _   -> putStrLn "  [Sin exportar]"
   eventosNuevos <- generarEventos eventos
   menuLoop eventosNuevos
