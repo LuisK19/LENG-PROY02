@@ -3,11 +3,10 @@ module Main (main) where
 import System.IO     (hSetBuffering, stdout, BufferMode(..))
 import System.Random (randomRIO)
 import Data.Time (getCurrentTime, utctDay, toGregorian,
-                  fromGregorian, Day, dayOfWeek, DayOfWeek(..))
+                  fromGregorian, Day, dayOfWeek)
 
-import Data.List        (intercalate, sortBy, groupBy, maximumBy)
+import Data.List        (intercalate, maximumBy)
 import Data.Ord         (comparing, Down(..))
-import Data.Function    (on)
 import System.Directory (createDirectoryIfMissing)
 
 -- Estructuras de datos para eventos:
@@ -45,21 +44,21 @@ addDaysSimple n d = toEnum (fromEnum d + n)
 fromGregorian2Int :: (Integer, Int, Int) -> Int
 fromGregorian2Int (y, m, d) = fromIntegral y * 10000 + m * 100 + d
 
--- Genera un solo evento aleatorio con un ID dado
-generarEvento :: Int -> IO Evento
-generarEvento eid = do
+-- Genera un solo evento aleatorio con un ID 
+generarEvento :: IO Evento
+generarEvento = do
+  eid      <- randomRIO (0, 9000000 :: Int)
   catIdx   <- randomRIO (0, 4 :: Int)
   val      <- randomRIO (500.0, 75000.0 :: Double)
   hoy      <- getCurrentTime
   let diaHoy = utctDay hoy
   diasExtra <- randomRIO (0, 730 :: Int)
   let diaFuturo = toGregorian (addDaysSimple diasExtra diaHoy)
-  let ts       = fromGregorian2Int diaFuturo
+  let ts        = fromGregorian2Int diaFuturo
   valFinal <- if val <= 0
               then do
                 putStrLn $ "  [INCONSISTENCIA] Evento " ++ show eid ++
-                           " tenia monto invalido (" ++ show val ++
-                           "), corregido a 500.0"
+                           " tenia monto invalido, corregido a 500.0"
                 return 500.0
               else return val
   return Evento
@@ -73,10 +72,7 @@ generarEvento eid = do
 generarEventos :: [Evento] -> IO [Evento]
 generarEventos existentes = do
   cantidad <- randomRIO (10, 25 :: Int)
-  let siguienteId = if null existentes
-                    then 0
-                    else maximum (map eventoId existentes) + 1
-  nuevos <- mapM generarEvento [siguienteId .. siguienteId + cantidad - 1]
+  nuevos   <- mapM (\_ -> generarEvento) [1..cantidad]
   putStrLn $ "  [Se generaron " ++ show cantidad ++ " nuevos eventos]"
   return (existentes ++ nuevos)
 
@@ -251,7 +247,6 @@ mostrarAnalisisTemporal eventos = do
 
 
 -- Busqueda por rango de fechas
-
 buscarPorRango :: Int -> Int -> [Evento] -> [Evento]
 buscarPorRango inicio fin = filter (\e -> timestamp e >= inicio && timestamp e <= fin)
 
@@ -315,19 +310,14 @@ mostrarEstadisticas eventos = do
   putStrLn $ "    Fecha: " ++ show dia ++ " | Eventos: " ++ show cant
 
 -- CSV
-
-eventoACSV :: Evento -> String
-eventoACSV e = intercalate ","
-  [ show (eventoId e)
-  , show (categoria e)
-  , show (valor e)
-  , show (timestamp e)
-  ]
-
--- Exporta las estadísticas calculadas a CSV
 exportarEstadisticasCSV :: [Evento] -> IO ()
 exportarEstadisticasCSV eventos = do
   createDirectoryIfMissing True "exports"
+  ahora <- getCurrentTime
+  let (y, m, d) = toGregorian (utctDay ahora)
+      pad n = if n < 10 then "0" ++ show n else show n
+      nombreArchivo = "exports/estadisticas_" ++ show y ++
+                      "-" ++ pad m ++ "-" ++ pad d ++ ".csv"
   let cats    = cantidadPorCategoria eventos
       mayor   = eventoMayor eventos
       menor   = eventoMenor eventos
@@ -351,13 +341,18 @@ exportarEstadisticasCSV eventos = do
                     ["# Cantidad por categoria", headerCats] ++ lineasCats ++
                     ["", "# Eventos extremos", headerExtr, lineaMayor, lineaMenor] ++
                     ["", "# Dia con mayor eventos", headerDia, lineaDia]
-  writeFile "exports/estadisticas.csv" contenido
-  putStrLn "  [OK] Estadisticas exportadas a exports/estadisticas.csv"
+  writeFile nombreArchivo contenido
+  putStrLn $ "  [OK] Estadisticas exportadas a " ++ nombreArchivo
 
--- Exporta las estadísticas calculadas a JSON
+-- JSON
 exportarEstadisticasJSON :: [Evento] -> IO ()
 exportarEstadisticasJSON eventos = do
   createDirectoryIfMissing True "exports"
+  ahora <- getCurrentTime
+  let (y, m, d) = toGregorian (utctDay ahora)
+      pad n = if n < 10 then "0" ++ show n else show n
+      nombreArchivo = "exports/estadisticas_" ++ show y ++
+                      "-" ++ pad m ++ "-" ++ pad d ++ ".json"
   let cats   = cantidadPorCategoria eventos
       mayor  = eventoMayor eventos
       menor  = eventoMenor eventos
@@ -386,10 +381,8 @@ exportarEstadisticasJSON eventos = do
                   "    \"cantidad\": " ++ show cantDia ++ "\n" ++
                   "  }"
       contenido = "{\n" ++ intercalate ",\n" [jsonCats, jsonExtr, jsonDia] ++ "\n}"
-  writeFile "exports/estadisticas.json" contenido
-  putStrLn "  [OK] Estadisticas exportadas a exports/estadisticas.json"
-
--- JSON
+  writeFile nombreArchivo contenido
+  putStrLn $ "  [OK] Estadisticas exportadas a " ++ nombreArchivo
 
 categoriaAString :: Categoria -> String
 categoriaAString Visualizacion = "visualizacion"
@@ -398,23 +391,6 @@ categoriaAString Compra        = "compra"
 categoriaAString Devolucion    = "devolucion"
 categoriaAString Seguimiento   = "seguimiento"
 
-eventoAJSON :: Evento -> String
-eventoAJSON e = concat
-  [ "  {"
-  , "\"id\":"        , show (eventoId e)  , ","
-  , "\"categoria\":" , "\"" ++ categoriaAString (categoria e) ++ "\","
-  , "\"valor\":"     , show (valor e)     , ","
-  , "\"timestamp\":" , show (timestamp e)
-  , "}"
-  ]
-
-exportarJSON :: [Evento] -> IO ()
-exportarJSON eventos = do
-  createDirectoryIfMissing True "exports"
-  let objetos   = map eventoAJSON eventos
-      contenido = "[\n" ++ intercalate ",\n" objetos ++ "\n]"
-  writeFile "exports/estadisticas.json" contenido
-  putStrLn "  [OK] Exportado a exports/estadisticas.json"
 
 -- ========================= Menu Principal ===================================
 
