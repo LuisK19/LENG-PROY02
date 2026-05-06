@@ -57,7 +57,7 @@ generarEvento = do
   let ts        = fromGregorian2Int diaFuturo
   valFinal <- if val <= 0
               then do
-                putStrLn $ "  [INCONSISTENCIA] Evento " ++ show eid ++
+                putStrLn $ "  INCONSISTENCIA: Evento " ++ show eid ++
                            " tenia monto invalido, corregido a 500.0"
                 return 500.0
               else return val
@@ -72,7 +72,7 @@ generarEvento = do
 generarEventos :: [Evento] -> IO [Evento]
 generarEventos existentes = do
   cantidad <- randomRIO (10, 25 :: Int)
-  nuevos   <- mapM (\_ -> generarEvento) [1..cantidad]
+  nuevos   <- mapM (const generarEvento) [1..cantidad]
   putStrLn $ "  [Se generaron " ++ show cantidad ++ " nuevos eventos]"
   return (existentes ++ nuevos)
 
@@ -140,7 +140,7 @@ anioDeTimestamp ts = ts `div` 10000
 promedioPorCategoriaAnio :: [Evento] -> [(Categoria, Int, Double)]
 promedioPorCategoriaAnio eventos =
   let categorias = [Visualizacion, Apartado, Compra, Devolucion, Seguimiento]
-      anios      = [2025, 2026, 2027]  
+      anios      = [2025, 2026, 2027]
       resultado  = [ (cat, anio, promedioValor evsFiltrados)
                    | cat  <- categorias
                    , anio <- anios
@@ -151,18 +151,6 @@ promedioPorCategoriaAnio eventos =
                    , not (null evsFiltrados)  -- omite combinaciones vacías
                    ]
   in resultado
-
-
-mostrarAnalisis :: [Evento] -> IO ()
-mostrarAnalisis eventos = do
-  putStrLn $ "\n  Monto total: " ++ show (montoTotal eventos)
-  putStrLn "\n  Promedio por categoria y anio:"
-  let promedios = promedioPorCategoriaAnio eventos
-  mapM_ (\(cat, anio, prom) ->
-    putStrLn $ "    " ++ show cat ++
-               " | " ++ show anio ++
-               " | Promedio: " ++ show prom
-    ) promedios
 
 -- Analisis temporal
 
@@ -179,23 +167,28 @@ timestampADay ts =
       dia  = diaDeTimestamp ts
   in fromGregorian anio mes dia
 
-mesMayorMonto :: [Evento] -> (Int, Double)
-mesMayorMonto [] = (0, 0)
+mesMayorMonto :: [Evento] -> (Int, Int, Double)
+mesMayorMonto [] = (0, 0, 0)
 mesMayorMonto eventos =
-  let meses     = [1..12]
-      totales   = map (\m ->
-                    let evsMes = filter (\e -> mesDeTimestamp (timestamp e) == m) eventos
-                        total  = foldl (\acc e -> acc + valor e) 0 evsMes
-                    in (m, total)
-                  ) meses
-      ganador   = foldl1 (\(bm, bt) (m, t) -> if t > bt then (m, t) else (bm, bt))
-                              totales
-  in ganador
+  let anios     = [2025, 2026, 2027, 2028]
+      meses     = [1..12]
+      -- Para cada combinación año+mes sumamos los montos
+      totales   = [ (anio, mes, total)
+                  | anio <- anios
+                  , mes  <- meses
+                  , let evs   = filter (\e -> anioDeTimestamp (timestamp e) == anio
+                                           && mesDeTimestamp  (timestamp e) == mes) eventos
+                  , not (null evs)
+                  , let total = foldl (\acc e -> acc + valor e) 0 evs
+                  ]
+  in if null totales then (0, 0, 0)
+     else foldl1 (\(ba, bm, bt) (a, m, t) ->
+                    if t > bt then (a, m, t) else (ba, bm, bt)) totales
 
 diaSemanaActivo :: [Evento] -> String
 diaSemanaActivo [] = "Sin datos"
 diaSemanaActivo eventos =
-  let 
+  let
       diasSemana = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
       contarDia d = length $ filter (\e ->
                       show (dayOfWeek (timestampADay (timestamp e))) == d
@@ -227,25 +220,6 @@ resumenPorIntervalo eventos = do
                "  |  Monto total: " ++ show total
     ) intervalos
 
-mostrarAnalisisTemporal :: [Evento] -> IO ()
-mostrarAnalisisTemporal [] = putStrLn "\n  No hay eventos para analizar."
-mostrarAnalisisTemporal eventos = do
-  let (mes, montoMes) = mesMayorMonto eventos
-  putStrLn $ "\n  Mes con mayor monto: " ++ show mes ++
-             " | Total: " ++ show montoMes
-
-  putStrLn $ "  Dia de semana mas activo: " ++ diaSemanaActivo eventos
-
-  let antiguo  = eventoMasAntiguo eventos
-      reciente = eventoMasReciente eventos
-  putStrLn "\n  Evento mas antiguo:"
-  mostrarEvento antiguo
-  putStrLn "  Evento mas reciente:"
-  mostrarEvento reciente
-
-  resumenPorIntervalo eventos
-
-
 -- Busqueda por rango de fechas
 buscarPorRango :: Int -> Int -> [Evento] -> [Evento]
 buscarPorRango inicio fin = filter (\e -> timestamp e >= inicio && timestamp e <= fin)
@@ -262,14 +236,14 @@ ejecutarBusqueda eventos = do
   case (reads inputInicio, reads inputFin) of
     ([(inicio, "")], [(fin, "")]) -> do
       if inicio > fin
-        then putStrLn "\n  [ERROR] La fecha inicio no puede ser mayor que la fecha fin."
+        then putStrLn "\n  ERROR: La fecha inicio no puede ser mayor que la fecha fin."
         else do
           let resultados = buscarPorRango inicio fin eventos
           putStrLn $ "\n  Eventos encontrados: " ++ show (length resultados)
           if null resultados
             then putStrLn "  No se encontraron eventos en ese rango."
             else mapM_ mostrarEvento resultados
-    _ -> putStrLn "\n  [ERROR] Formato de fecha invalido. Use YYYYMMDD."
+    _ -> putStrLn "\n  ERROR: Formato de fecha invalido. Use YYYYMMDD."
 
 -- Estadisticas
 
@@ -287,7 +261,7 @@ eventoMenor = maximumBy (comparing (Down . valor))
 diaMayorEventos :: [Evento] -> (Int, Int)
 diaMayorEventos [] = (0, 0)
 diaMayorEventos eventos =
-  let agrupados = map (\e -> timestamp e) eventos
+  let agrupados = map timestamp eventos
       contarDia d = (d, length $ filter (\e -> timestamp e == d) eventos)
       conteos   = map contarDia agrupados
   in foldl1 (\(bd, bc) (d, c) -> if c > bc then (d, c) else (bd, bc)) conteos
@@ -306,7 +280,7 @@ mostrarEstadisticas eventos = do
   mostrarEvento (eventoMenor eventos)
 
   let (dia, cant) = diaMayorEventos eventos
-  putStrLn $ "\n  --- Dia con mayor cantidad de eventos ---"
+  putStrLn "\n  --- Dia con mayor cantidad de eventos ---"
   putStrLn $ "    Fecha: " ++ show dia ++ " | Eventos: " ++ show cant
 
 -- CSV
@@ -342,7 +316,7 @@ exportarEstadisticasCSV eventos = do
                     ["", "# Eventos extremos", headerExtr, lineaMayor, lineaMenor] ++
                     ["", "# Dia con mayor eventos", headerDia, lineaDia]
   writeFile nombreArchivo contenido
-  putStrLn $ "  [OK] Estadisticas exportadas a " ++ nombreArchivo
+  putStrLn $ "  Exitoso: Estadisticas exportadas a " ++ nombreArchivo
 
 -- JSON
 exportarEstadisticasJSON :: [Evento] -> IO ()
@@ -382,7 +356,7 @@ exportarEstadisticasJSON eventos = do
                   "  }"
       contenido = "{\n" ++ intercalate ",\n" [jsonCats, jsonExtr, jsonDia] ++ "\n}"
   writeFile nombreArchivo contenido
-  putStrLn $ "  [OK] Estadisticas exportadas a " ++ nombreArchivo
+  putStrLn $ "  Exitoso: Estadisticas exportadas a " ++ nombreArchivo
 
 categoriaAString :: Categoria -> String
 categoriaAString Visualizacion = "visualizacion"
@@ -439,13 +413,48 @@ manejarOpcion eventos "1" = do
 
 manejarOpcion eventos "2" = do
   putStrLn "\n--- Analisis de datos ---"
-  mostrarAnalisis eventos
+  putStrLn "a. Monto total"
+  putStrLn "b. Promedio por categoria y anio"
+  putStr "Seleccione: "
+  sub <- getLine
+  case sub of
+    "a" -> do
+      putStrLn $ "\n  Monto total: " ++ show (montoTotal eventos)
+    "b" -> do
+      putStrLn "\n  Promedio por categoria y anio:"
+      let promedios = promedioPorCategoriaAnio eventos
+      mapM_ (\(cat, anio, prom) ->
+        putStrLn $ "    " ++ show cat ++
+                   " | " ++ show anio ++
+                   " | Promedio: " ++ show prom
+        ) promedios
+    _ -> putStrLn "\n  Opcion no valida."
   eventosNuevos <- generarEventos eventos
   menuLoop eventosNuevos
 
 manejarOpcion eventos "3" = do
   putStrLn "\n--- Analisis Temporal ---"
-  mostrarAnalisisTemporal eventos
+  putStrLn "a. Mes con mayor monto y dia mas activo"
+  putStrLn "b. Evento mas antiguo y reciente"
+  putStrLn "c. Resumen por intervalo"
+  putStr "Seleccione: "
+  sub <- getLine
+  case sub of
+    "a" -> do
+      let (anio, mes, montoMes) = mesMayorMonto eventos
+      putStrLn $ "\n  Mes con mayor monto: " ++ show mes ++
+                 "/" ++ show anio ++
+                 " | Total: " ++ show montoMes
+      putStrLn $ "  Dia de semana mas activo: " ++ diaSemanaActivo eventos
+    "b" -> do
+      let antiguo  = eventoMasAntiguo eventos
+          reciente = eventoMasReciente eventos
+      putStrLn "\n  Evento mas antiguo:"
+      mostrarEvento antiguo
+      putStrLn "  Evento mas reciente:"
+      mostrarEvento reciente
+    "c" -> resumenPorIntervalo eventos
+    _   -> putStrLn "\n  Opcion no valida."
   eventosNuevos <- generarEventos eventos
   menuLoop eventosNuevos
 
@@ -471,7 +480,7 @@ manejarOpcion eventos "5" = do
     "c" -> do
       exportarEstadisticasCSV eventos
       exportarEstadisticasJSON eventos
-    _   -> putStrLn "  [Sin exportar]"
+    _   -> putStrLn "  No se exporto ningun reporte."
   eventosNuevos <- generarEventos eventos
   menuLoop eventosNuevos
 
