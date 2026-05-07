@@ -1,0 +1,16 @@
+# Cantidad por categoria
+categoria,cantidad
+visualizacion,27
+apartado,33
+compra,23
+devolucion,38
+seguimiento,34
+
+# Eventos extremos
+tipo,id,categoria,valor,timestamp
+mayor,8248778,visualizacion,74834.78766988352,20261002
+menor,3785721,devolucion,646.2464841748956,20260713
+
+# Dia con mayor eventos
+fecha,cantidad_eventos
+20260930,2

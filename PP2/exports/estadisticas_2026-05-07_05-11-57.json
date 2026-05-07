@@ -1,0 +1,17 @@
+{
+  "cantidad_por_categoria": {
+    "visualizacion": 27,
+    "apartado": 33,
+    "compra": 23,
+    "devolucion": 38,
+    "seguimiento": 34
+  },
+  "eventos_extremos": [
+    {"tipo":"mayor","id":8248778,"categoria":"visualizacion","valor":74834.78766988352,"timestamp":20261002},
+    {"tipo":"menor","id":3785721,"categoria":"devolucion","valor":646.2464841748956,"timestamp":20260713}
+  ],
+  "dia_mayor_eventos": {
+    "fecha": 20260930,
+    "cantidad": 2
+  }
+}
