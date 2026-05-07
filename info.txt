@@ -1,0 +1,10 @@
+a. Nombre del curso: Lenguajes de programación GR 60
+b. Número de semestre y año lectivo: Semetre I, 2026
+c. Nombre de los Estudiante: Luis Carlos Trejos Rivera
+d. Número de carnet de los estudiante: 2022437816
+e. Número de proyecto programado: 2
+f. Fecha de entrega: 06-05-2026
+g. Estatus de la entrega (debe ser CONGRUENTE con la solución entregada):
+MuyBuena
+
+Github: https://github.com/LuisK19/LENG-PROY02

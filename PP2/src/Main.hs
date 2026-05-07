@@ -38,8 +38,7 @@ data Evento = Evento
   , timestamp :: Int
   } deriving (Show, Eq)
 
-
--- ======== UTILIDADES DE CONVERSIÓN ===============================================
+-- ======== UTILIDADES DE CONVERSIÓN ===================================================================
 
 -- | Convierte un índice entero (0-4) al constructor de Categoria correspondiente.
 --   Entrada:  Int entre 0 y 4
@@ -158,8 +157,7 @@ mostrarEvento e = putStrLn $
   " | Valor: " ++ show (valor e)     ++
   " | TS: "    ++ show (timestamp e)
 
-
--- ======== TRANSFORMACIÓN DE EVENTOS ========
+-- ======== TRANSFORMACIÓN DE EVENTOS ===================================================================
 
 -- | Aplica el impuesto de ventas del 13% al valor de un evento de tipo Compra.
 --   Si el evento no es de categoría Compra, lo retorna sin modificaciones.
@@ -234,7 +232,7 @@ mostrarEtiquetados = mapM_ mostrar
       " | Valor: " ++ show (valor e) ++
       if alto then " [*** ALTO VALOR ***]" else ""
 
--- ======== ANÁLISIS DE DATOS ========
+-- ======== ANÁLISIS DE DATOS ===================================================================
 
 -- | Calcula la suma de los valores de todos los eventos usando foldl.
 --   Entrada:  lista de eventos
@@ -262,7 +260,7 @@ promedioPorCategoriaAnio eventos =
                    ]
   in resultado
 
--- ======== ANÁLISIS TEMPORAL ========
+-- ======== ANÁLISIS TEMPORAL ===================================================================
 
 -- | Encuentra el mes y año con mayor monto total acumulado.
 --   Separa por año para que enero 2026 y enero 2027 no se mezclen.
@@ -337,8 +335,7 @@ resumenPorIntervalo eventos = do
                "  |  Monto total: " ++ show total
     ) intervalos
 
--- ======== BÚSQUEDA ========
-
+-- ======== BÚSQUEDA ===================================================================
 
 -- | Filtra eventos cuyo timestamp esté dentro del rango [inicio, fin].
 --   Entrada:  inicio - fecha mínima YYYYMMDD; fin - fecha máxima YYYYMMDD; lista
@@ -372,7 +369,7 @@ ejecutarBusqueda eventos = do
     _ -> putStrLn "\n  ERROR: Formato de fecha invalido. Use YYYYMMDD."
 
 
--- ======== ESTADÍSTICAS ========
+-- ======== ESTADÍSTICAS ===================================================================
 
 -- | Cuenta la cantidad de eventos por cada categoría.
 --   Entrada:  lista de eventos
@@ -425,8 +422,7 @@ mostrarEstadisticas eventos = do
   putStrLn "\n  --- Dia con mayor cantidad de eventos ---"
   putStrLn $ "    Fecha: " ++ show dia ++ " | Eventos: " ++ show cant
 
--- ======== EXPORTACIÓN ========
-
+-- ======== EXPORTACIÓN ===================================================================
 
 -- | Exporta las estadísticas calculadas a un archivo CSV con nombre único por fecha.
 --   El archivo incluye: cantidad por categoría, eventos extremos y día más activo.
@@ -512,7 +508,7 @@ exportarEstadisticasJSON eventos = do
   writeFile nombreArchivo contenido
   putStrLn $ "  Exitoso: Estadisticas exportadas a " ++ nombreArchivo
 
--- ======== MENÚ PRINCIPAL ========
+-- ======== MENÚ PRINCIPAL ===================================================================
 
 -- | Imprime el menú principal con todas las opciones disponibles.
 --   Salida: IO () - muestra el menú en consola
