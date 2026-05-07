@@ -343,12 +343,30 @@ resumenPorIntervalo eventos = do
 buscarPorRango :: Int -> Int -> [Evento] -> [Evento]
 buscarPorRango inicio fin = filter (\e -> timestamp e >= inicio && timestamp e <= fin)
 
+-- | Valida que un timestamp YYYYMMDD sea una fecha real
+fechaValida :: Int -> Bool
+fechaValida ts =
+  let anio = ts `div` 10000
+      mes  = (ts `mod` 10000) `div` 100
+      dia  = ts `mod` 100
+      diasPorMes = [31,28,31,30,31,30,31,31,30,31,30,31]
+      esBisiesto = (anio `mod` 4 == 0 && anio `mod` 100 /= 0)
+                || anio `mod` 400 == 0
+      maxDias m
+        | m == 2 && esBisiesto = 29
+        | m >= 1 && m <= 12    = diasPorMes !! (m-1)
+        | otherwise            = 0
+  in anio >= 2020 && anio <= 2035
+  && mes >= 1 && mes <= 12
+  && dia >= 1 && dia <= maxDias mes
+
 -- | Interactúa con el usuario para obtener fechas y ejecutar la búsqueda.
 --   Lee dos fechas en formato YYYYMMDD, valida el formato y el orden lógico.
 --   Entrada:  lista de eventos sobre la cual buscar
 --   Salida:   IO () - imprime los eventos encontrados o mensajes de error
 ejecutarBusqueda :: [Evento] -> IO ()
 ejecutarBusqueda eventos = do
+  putStrLn "\n  Rango de fechas valido: 20250101 hasta 20351231"
   putStrLn "\n  Ingrese fecha inicio (YYYYMMDD, ej: 20260101):"
   putStr "  > "
   inputInicio <- getLine
@@ -358,7 +376,11 @@ ejecutarBusqueda eventos = do
   -- reads parsea el String de forma segura; lista vacía indica formato inválido
   case (reads inputInicio, reads inputFin) of
     ([(inicio, "")], [(fin, "")]) -> do
-      if inicio > fin
+      if not (fechaValida inicio)
+        then putStrLn "\n  ERROR: La fecha inicio no es una fecha valida."
+      else if not (fechaValida fin)
+        then putStrLn "\n  ERROR: La fecha fin no es una fecha valida."
+      else if inicio > fin
         then putStrLn "\n  ERROR: La fecha inicio no puede ser mayor que la fecha fin."
         else do
           let resultados = buscarPorRango inicio fin eventos
@@ -366,8 +388,7 @@ ejecutarBusqueda eventos = do
           if null resultados
             then putStrLn "  No se encontraron eventos en ese rango."
             else mapM_ mostrarEvento resultados
-    _ -> putStrLn "\n  ERROR: Formato de fecha invalido. Use YYYYMMDD."
-
+    _ -> putStrLn "\n  ERROR: Formato invalido. Use YYYYMMDD (ejemplo: 20260101)."
 
 -- ======== ESTADÍSTICAS ===================================================================
 
