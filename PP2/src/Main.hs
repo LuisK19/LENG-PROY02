@@ -366,7 +366,7 @@ fechaValida ts =
 --   Salida:   IO () - imprime los eventos encontrados o mensajes de error
 ejecutarBusqueda :: [Evento] -> IO ()
 ejecutarBusqueda eventos = do
-  putStrLn "\n  Rango de fechas valido: 20250101 hasta 20351231"
+  putStrLn "\n  Rango de fechas valido: 20200101 hasta 20351231"
   putStrLn "\n  Ingrese fecha inicio (YYYYMMDD, ej: 20260101):"
   putStr "  > "
   inputInicio <- getLine
